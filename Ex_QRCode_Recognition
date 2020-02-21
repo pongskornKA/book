@@ -1,0 +1,114 @@
+#include "ESPino32CAM_QRCode.h"   //ประกาศให้นำ Libraly ESPino32CAM_QRCode เข้ามาใช้งาน
+ESPino32QRCode qr;    //สร้าง object qr
+#define BUTTON_QR 15    //ประกาศตัวแปร BUTTON_QR เป็น 15 (กดที่ปุ่มสีแดง Button Switch Module)
+
+void setupQr() {
+  qr.init(&cam);    //เริ่มต้นการทำงาน qr 
+  pinMode(BUTTON_QR, INPUT);    //กำหนด pinMode ของปุ่มแดงเป็น INPUT
+}
+
+void loopQr() {
+  camera_fb_t *fb = cam.capture();    //ถ่ายรูป และ เก็บรูปภาพอยู่ใน fb
+  String msg;   //กำหนดตัวแปร String เป็นข้อความ msg
+  if (!fb)    //ถ้าเก็บภาพใน fb ไม่ได้จะปริ้นข้อความด้านล่าง
+  {
+    Serial.println("Camera capture failed");
+    return;
+  }
+  dl_matrix3du_t *image_rgb;
+  if(cam.jpg2rgb(fb,&image_rgb))
+  {
+     cam.clearMemory(fb);   //เคลียร์หน่วยความจำของ fb
+     if(!digitalRead(BUTTON_QR) ){  //ถ้ามีการกดปุ่มสีแดง
+      if (WiFi.status() == WL_CONNECTED){   //ถ้ามีการเชื่อมต่อ WIFI
+         tft.fillScreen(TFT_BLACK);   //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ 
+         tft.setTextColor(TFT_BLUE);    //ตั้งค่า font ตัวหนังสือเป็นสีน้ำเงินด้วยฟังก์ชัน setTextColor  
+         tft.drawString("Capture...", 60, 20, 4);   //ใส่ตัวอักษร “Capture” ที่ตำแหน่ง x=60, y=20
+         tft.drawString("&", 100, 65, 4);   //ใส่ตัวอักษร “&” x=100 , y=65
+         tft.drawString("QRcodeScaning...", 15, 110, 4);    //ใส่ตัวอักษร “QRcodeScaning...” x=15 , y=110
+        cam.printDebug("\r\nQR Read:");   //ทำการสแกน QRcode
+        qrResoult res = qr.recognition(image_rgb);    //นำภาพที่แปลงเป็น RGB 888 ส่งเข้าไปใน function  recognition เพื่ออ่าน QRcode
+         if(res.status)   //ตรวจสอบ res.status ถ้าหากเป็น true คือ สามารถอ่าน QRcode ได้
+         {
+          //แสดงผลลัพธ์การแสดง QRCode ผ่านทาง Serial monitor
+          cam.printDebug("");
+          cam.printfDebug("Version: %d", res.version);
+          cam.printfDebug("ECC level: %c",res.eccLevel);
+          cam.printfDebug("Mask: %d", res.mask);
+          cam.printDebug("Data type: "+ qr.dataType(res.dataType));
+          cam.printfDebug("Length: %d",res.length);
+          cam.printDebug("Payload: "+res.payload);
+          
+          //แสดงผลลัพธ์ของ QRCode ที่จอ TFT (นำมาเฉพาะ Payload เท่านั้น)
+          tft.drawString(("Payload  " ), 5, 150, 4);    //ใส่ตัวอักษร “Payload” x=5 , y=150  
+          tft.drawString((" "+res.payload), 0, 175, 2);   //ใส่ตัวอักษรของ payload ที่สแกนเจอที่ x=0 , y=175 
+         }
+       else{    //ถ้าไม่พบเจอ QRcode จะปริ้นว่า FAIL ที่หน้าจอ Serial monitor และปริ้นว่า QRcode not Found ที่จอ TFT
+        cam.printDebug("FAIL");
+        tft.drawString("QRcode not Found", 5, 150, 4);    //ใส่ตัวอักษร “QRcode not Found” x=5 , y=150  
+       }
+       {                    
+         sensor_t *s = cam.sensor();    //ประกาศตัวแปร sensor_t *s เพื่อรับค่า pointer จาก Function sensor  
+         s->set_framesize(s, FRAMESIZE_UXGA);   //กำหนดขนาดภาพถ่าย = UXGA (1600 x 1200 pixel)   
+         delay(1000); //รอการปรับขนาดของกล้อง   
+         lineResp ret;
+         
+         //String ที่ประกาศไว้ข้างต้น กำหนดเป็นข้อความ
+         msg = "ทดสอบ ส่งข้อความ สติ๊กเกอร์ และ รูปภาพจากกล้อง ESPIno32CAM\nQRcode = ";   
+         Serial.println("Send Message,Sticker and Image: "+msg);
+         Serial.println("Capture");
+         fb = cam.capture();
+         ret = line.send(msg +res.payload ,4,275,fb->buf, fb->len);   //เพิ่มข้อความที่ส่งไปยัง LineNotify โดยการเพิ่ม +res.payload ต่อท้ายข้อความ msg    
+         cam.clearMemory(fb);   //เคลียร์หน่วยความจำ fb
+         if(ret.status)
+          {
+            //แสดงผลที่ LineNotify ตอบกลับมา ว่าภายใน 1 ชั่วโมงมีการใช้งาน line API และการส่งภาพทั้งหมดกี่ครั้ง
+           Serial.printf("API Called %d/%d per hour\r\n",ret.remaining,ret.limit);
+           Serial.printf("Send Image %d/%d per hour\r\n",ret.imageremaining,ret.imagelimit);
+           Serial.printf("The time when the limit is reset %d(UTC epoch seconds) , ",ret.reset);
+           Serial.println(ret.reset_time);
+           }
+         else
+           Serial.println(ret.response);
+           Serial.println();
+           tft.fillScreen(TFT_BLACK);   //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ
+
+           //ปรับขนาดภาพถ่ายกลับเป็น HQVGA (240x176 pixel) เพื่อใช้กับจอ TFT  
+           s->set_framesize(s, FRAMESIZE_HQVGA);     
+           delay(1000);   //รอให้กล้องปรับขนาดกลับ 1 วินาที
+         } 
+      }
+    if (WiFi.status() != WL_CONNECTED){   //ถ้าสถานะการเชื่อมต่อ WIFI ไม่สำเร็จ
+      tft.fillScreen(TFT_BLACK);    //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ   
+      tft.setTextColor(TFT_BLUE);   //ตั้งค่า font ตัวหนังสือเป็นสีน้ำเงินด้วยฟังก์ชัน setTextColor  
+      tft.drawString("Connection failed", 15, 20, 4);   //ใส่ตัวอักษร “Connection failed” x=15 , y=20 
+      tft.drawString("QRcodeScaning...", 15, 65, 4);  //ใส่ตัวอักษร “QRcodeScaning...” x=15 , y=65  
+       cam.printDebug("\r\nQR Read:");
+       qrResoult res = qr.recognition(image_rgb);   //นำภาพที่แปลงเป็น RGB 888 ส่งเข้าไปใน function  recognition เพื่ออ่าน QRcode
+         if(res.status)
+         {
+          //แสดงผลลัพธ์การแสดง QRCode ผ่านทาง Serial monitor
+          cam.printDebug("");
+          cam.printfDebug("Version: %d", res.version);
+          cam.printfDebug("ECC level: %c",res.eccLevel);
+          cam.printfDebug("Mask: %d", res.mask);
+          cam.printDebug("Data type: "+ qr.dataType(res.dataType));
+          cam.printfDebug("Length: %d",res.length);
+          cam.printDebug("Payload: "+res.payload);
+          
+          //แสดงผลลัพธ์ของ QRCode ที่จอ TFT (นำมาเฉพาะ Payload เท่านั้น)
+          tft.drawString(("Payload  " ), 5, 110, 4);    //ใส่ตัวอักษร “Payload” x=5 , y=110   
+          tft.drawString((" "+res.payload), 0, 135, 2);  //ใส่ตัวอักษรของ payload ที่สแกนเจอที่ x=0 , y=135 
+          delay(1500); 
+         }
+       else{
+        cam.printDebug("FAIL");
+        tft.drawString("QRcode not Found", 5, 110, 4);    //ใส่ตัวอักษร “QRcode not Found” x=5 , y=110 
+        delay(1500);
+       }
+        tft.fillScreen(TFT_BLACK);    //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ 
+       }
+     }
+  }
+  cam.clearMemory(image_rgb);   //เคลียร์หน่วยความจำ image_rgb
+}
