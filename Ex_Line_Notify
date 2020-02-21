@@ -1,0 +1,48 @@
+#include "ESPino32CAM_LineNotify.h"   //ประกาศให้นำ Libraly ESPino32CAM_LineNotify เข้ามาใช้งาน
+const char* ssid     = "book12345678";    //ใส่ชื่อ SSID ของ Access piont ที่ต้องการเชื่อมต่อ (ชื่อ WIFI INTERNET) 
+const char* password = "12345678";    //ใส่ชื่อ password ของ Access piont ที่ต้องการเชื่อมต่อ
+String token = "zotxkrVn7THvLzf4MHNAHN2MBemCB66q3CUjBxDJGaz";   //ใส่ Token ที่ได้จากการ generate token
+LineNotify line;    //สร้าง Object line
+#define Button 0    //ประกาศตัวแปร Button เป็น 0 (กดที่ปุ่ม program บนบอร์ด ESPIno32CAM)
+int i =0;   //ประกาศตัวแปรที่นับเวลาการเชื่อมต่อ WIFI เริ่มต้นที่ 0
+
+void setupLine() {
+    tft.fillScreen(TFT_BLACK);    //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ
+    tft.setTextColor(TFT_BLUE);   //ตั้งค่า font ตัวหนังสือเป็นสีน้ำเงินด้วยฟังก์ชัน setTextColor
+    tft.drawString("Connecting...", 45, 110, 4);   //ใส่ตัวอักษร “Connecting...” ด้วยฟังก์ชัน drawString
+    
+  sensor_t *s = cam.sensor();   //ประกาศตัวแปร sensor_t *s เพื่อรับค่า pointer จาก Function sensor 
+  s->set_whitebal(s,true);    //เปิดใช้ white balance
+  Serial.print("Attempting to connect to SSID: ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);   //เริ่มเชื่อมต่อ WIFI
+  while (WiFi.status() != WL_CONNECTED and i < 5)   //ให้ทำงานในลูปจนกว่าจะเชื่อมต่อสำเร็จและค่า i ไม่เกิน 5
+  {
+    Serial.print(".");    //ในทุกๆการวนลูปให้ print ตัวอักษรว่า " . " เป็นการบอกว่ากำลังเชื่อมต่อ WIFI
+    delay(1000);
+  i++;    //เมื่อรอ 1 วินาทีแล้วให้ i มีค่าเพิ่มขึ้น 1
+  }
+  if (i ==5){
+    tft.fillScreen(TFT_BLACK);    //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ
+    tft.setTextColor(TFT_BLUE);   //ตั้งค่า font ตัวหนังสือเป็นสีน้ำเงินด้วยฟังก์ชัน setTextColor
+    tft.drawString("Connection failed", 15, 110, 4);   //ใส่ตัวอักษร “Connection failed” ด้วยฟังก์ชัน drawString
+    delay(2000);
+  }
+    if (WiFi.status() == WL_CONNECTED){
+    tft.fillScreen(TFT_BLACK);    //ใช้ฟังชันก์ fillScreen ปรับจอภาพเป็นสีดำ
+    tft.setTextColor(TFT_BLUE);   //ตั้งค่า font ตัวหนังสือเป็นสีน้ำเงินด้วยฟังก์ชัน setTextColor
+    tft.drawString("Connected", 60, 110, 4);   //ใส่ตัวอักษร “Connected” ด้วยฟังก์ชัน drawString
+    Serial.println("\r\nConnected");
+    delay(1500);
+  } 
+  line.authenKey(token);    //กำหนดค่า Toket  
+  line.setUTC(7);   //ตั้ง Time zone เป็น UTC+7
+}
+
+void loopLine() {
+    if(!digitalRead(Button))    //ถ้ามีการกดปุ่ม program ที่บอร์ด Espino32cam
+  {
+    i = 0;    //เมื่อมีการกดปุ่มจะกำหนดให้เริ่มนับ i = 0 ใหม่อีกครั้ง
+    setupLine() ;
+  }
+}
